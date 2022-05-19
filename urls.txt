@@ -1,0 +1,8 @@
+- Paper
+https://paperswithcode.com/dataset/glas
+
+- Dataset:
+https://docs.activeloop.ai/datasets/glas-dataset
+
+- Cargador para el dataset (ya instalado con requirements.txt):
+https://github.com/activeloopai/Hub
