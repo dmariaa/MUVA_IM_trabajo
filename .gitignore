@@ -238,3 +238,6 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 materiales/
+
+augmented_dataset/
+dataset/
