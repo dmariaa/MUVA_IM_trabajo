@@ -43,8 +43,8 @@ class GlasDataset(Dataset):
         self.images = {}
 
     def __len__(self):
-        # return self.df.shape[0]
-        return 16
+        return self.df.shape[0]
+        # return 16
 
     def __getitem__(self, item_idx):
         item = self.df.iloc[item_idx]

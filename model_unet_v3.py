@@ -149,30 +149,30 @@ class Unet(nn.Module):
         super(Unet, self).__init__()
 
         self.down_blocks = [
-            DownBlock(in_channels=input_channels, out_channels=32, pooling=True, activation='leaky', normalization=True,
+            DownBlock(in_channels=input_channels, out_channels=32, pooling=True, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
-            DownBlock(in_channels=32, out_channels=64, pooling=True, activation='leaky', normalization=True,
+            DownBlock(in_channels=32, out_channels=64, pooling=True, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
-            DownBlock(in_channels=64, out_channels=128, pooling=True, activation='leaky', normalization=True,
+            DownBlock(in_channels=64, out_channels=128, pooling=True, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
-            DownBlock(in_channels=128, out_channels=256, pooling=True, activation='leaky', normalization=True,
+            DownBlock(in_channels=128, out_channels=256, pooling=True, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
-            DownBlock(in_channels=256, out_channels=512, pooling=True, activation='leaky', normalization=True,
+            DownBlock(in_channels=256, out_channels=512, pooling=True, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
-            DownBlock(in_channels=512, out_channels=1024, pooling=False, activation='leaky', normalization=True,
+            DownBlock(in_channels=512, out_channels=1024, pooling=False, activation='relu', normalization=True,
                       conv_mode='same', dropout=use_drop_out),
         ]
 
         self.up_blocks = [
-            UpBlock(in_channels=1024, out_channels=512, activation='leaky', normalization=True, conv_mode='same',
+            UpBlock(in_channels=1024, out_channels=512, activation='relu', normalization=True, conv_mode='same',
                     dropout=use_drop_out),
-            UpBlock(in_channels=512, out_channels=256, activation='leaky', normalization=True, conv_mode='same',
+            UpBlock(in_channels=512, out_channels=256, activation='relu', normalization=True, conv_mode='same',
                     dropout=use_drop_out),
-            UpBlock(in_channels=256, out_channels=128, activation='leaky', normalization=True, conv_mode='same',
+            UpBlock(in_channels=256, out_channels=128, activation='relu', normalization=True, conv_mode='same',
                     dropout=use_drop_out),
-            UpBlock(in_channels=128, out_channels=64, activation='leaky', normalization=True, conv_mode='same',
+            UpBlock(in_channels=128, out_channels=64, activation='relu', normalization=True, conv_mode='same',
                     dropout=use_drop_out),
-            UpBlock(in_channels=64, out_channels=32, activation='leaky', normalization=True, conv_mode='same',
+            UpBlock(in_channels=64, out_channels=32, activation='relu', normalization=True, conv_mode='same',
                     dropout=use_drop_out),
         ]
 

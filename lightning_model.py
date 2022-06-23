@@ -5,7 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torchmetrics import Accuracy, Dice, PrecisionRecallCurve
+from torchmetrics import Accuracy, Dice, PrecisionRecallCurve, Precision, Recall
 
 
 class LightningModel(pl.LightningModule):
@@ -17,9 +17,11 @@ class LightningModel(pl.LightningModule):
         self.train_accuracy = Accuracy(num_classes=1, average='micro', threshold=0.5, multiclass=False)
         self.val_accuracy = Accuracy(num_classes=1, average='micro', threshold=0.5, multiclass=False)
 
-        self.test_accuracy = Accuracy(mdmc_average='samplewise')
-        self.test_dice = Dice()
-        self.test_precision_recall = PrecisionRecallCurve()
+        self.test_accuracy = Accuracy(num_classes=1, average='micro', threshold=0.5, multiclass=False)
+        self.test_dice = Dice(num_classes=1, average='micro', threshold=0.5, multiclass=False)
+        self.test_precision = Precision(num_classes=1, average='micro', threshold=0.5, multiclass=False)
+        self.test_recall = Recall(num_classes=1, average='micro', threshold=0.5, multiclass=False)
+        self.test_stats = {}
 
     def forward(self, x):
         return self.model(x)
@@ -70,25 +72,52 @@ class LightningModel(pl.LightningModule):
         gts = torch.flatten(y.type(torch.uint8), start_dim=1)
         self.test_accuracy(preds, gts)
         self.test_dice(preds, gts)
-        self.test_precision_recall.update(torch.flatten(y_hat, start_dim=1), gts)
+        self.test_precision(preds, gts)
+        self.test_recall(preds, gts)
 
         self.log("test_loss", test_loss, prog_bar=True)
         self.log("test_accuracy", self.test_accuracy, prog_bar=True)
         self.log("test_dice", self.test_dice, prog_bar=True)
+        self.log("test_precision", self.test_precision, prog_bar=True)
+        self.log("test_recall", self.test_recall, prog_bar=True)
+
+        if 'iou' not in self.test_stats.keys():
+            self.test_stats['iou'] = torch.Tensor()
+        self.test_stats['iou'] = torch.cat([self.test_stats['iou'], self.iou(preds, gts)])
+
+        if 'f1_score' not in self.test_stats.keys():
+            self.test_stats['f1_score'] = torch.Tensor()
+        self.test_stats['f1_score'] = torch.cat([self.test_stats['f1_score'], self.f1_score(preds, gts)])
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         x, y = batch
         pred = self(x)
         pred_data = (pred > 0.5).type(torch.uint8)
         pred_data = pred_data.cpu().detach().numpy()
-
         return pred
 
     def on_test_end(self) -> None:
-        pass
+        print(f"\ntest_iou: {torch.mean(self.test_stats['iou'])}"
+              f"\ntest_f1score: {torch.mean(self.test_stats['f1_score'])}")
 
     def _loss(self, y_pred, y_gt):
         return F.binary_cross_entropy(y_pred, y_gt)
+
+    def iou(self, y_pred, y_gt):
+        y_pred = y_pred.cpu().detach()
+        y_gt = y_gt.cpu().detach()
+        intersection = torch.sum(torch.abs(y_pred * y_gt), dim=1)
+        union = torch.sum(y_gt, dim=1) + torch.sum(y_pred, dim=1) - intersection
+        del y_pred
+        del y_gt
+        return (intersection + 1) / (union + 1)
+
+    def f1_score(self, y_pred, y_gt):
+        y_pred = y_pred.cpu().detach()
+        y_gt = y_gt.cpu().detach()
+        intersection = torch.sum(torch.abs(y_pred * y_gt), dim=1)
+        union = torch.sum(y_gt, dim=1) + torch.sum(y_pred, dim=1)
+        return (2 * intersection + 1) / (union + 1)
 
 
 def load_checkpoint(check_point, gpu, version: int = 2):

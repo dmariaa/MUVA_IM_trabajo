@@ -87,8 +87,8 @@ def read_augment_dataset(data_folder: str, output_folder: str, number_of_augment
             for j in range(number_of_augmentations):
                 image_name = f"{row['name']}-p_{i}-a_{j}.bmp"
                 mask_name = f"{row['name']}-p_{i}-a_{j}_anno.bmp"
-                cv2.imwrite(os.path.join(output_folder, image_name), augmented_images[j])
-                cv2.imwrite(os.path.join(output_folder, mask_name), augmented_masks[j])
+                cv2.imwrite(os.path.join(output_folder, image_name), cv2.cvtColor(augmented_images[j], cv2.COLOR_RGB2BGR))
+                cv2.imwrite(os.path.join(output_folder, mask_name), cv2.cvtColor(augmented_masks[j], cv2.COLOR_RGB2BGR))
 
                 metadata.append({
                     'name': row['name'],
