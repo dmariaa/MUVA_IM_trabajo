@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="99eb3d12-a2d1-46f9-a772-565935fb565e" name="DGX">
+        <fileTransfer rootFolder="/home/dmarribas/trabajo-im" accessType="SFTP" host="10.100.18.126" port="22" sshConfigId="84b97cd8-5daf-45a7-a954-908501824a9e" sshConfig="DGX">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

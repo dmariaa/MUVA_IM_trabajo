@@ -1,109 +1,102 @@
 import os
+from typing import Optional
 
 import cv2
 import numpy as np
 import pandas as pd
-
-import itk
-from patchify import patchify
-import albumentations as alb
-
-
-def normalize_color(image, reference):
-    ImageType = itk.Image[itk.RGBPixel[itk.UC], 2]
-    image_itk = itk.image_from_array(image, ttype=ImageType)
-    reference_itk = itk.image_from_array(reference, ttype=ImageType)
-
-    normalized_img = itk.structure_preserving_color_normalization_filter(
-        image_itk,
-        reference_itk,
-        color_index_suppressed_by_hematoxylin=0,
-        color_index_suppressed_by_eosin=1)
-
-    return np.asarray(normalized_img)
+import torch.nn
+from pytorch_lightning import LightningDataModule
+from pytorch_lightning.utilities.types import TRAIN_DATALOADERS, EVAL_DATALOADERS
+from torch.utils.data import Dataset, random_split, DataLoader
+from torchvision import transforms
 
 
-def augment_image(image, mask, number_of_augmentations,
-                  transform = alb.Compose([
-                    alb.HorizontalFlip(p=0.5),
-                    alb.VerticalFlip(p=0.5),
-                    alb.RandomRotate90(p=0.5),
-                  ]),
-                  max_rotation=20):
-
-    images = []
-    masks = []
-
-    for i in range(number_of_augmentations):
-        transformed = transform(image=image, mask=mask)
-        images.append(transformed['image'])
-        masks.append(transformed['mask'])
-
-    return images, masks
+class MaskSegmentationTransform:
+    def __call__(self, mask):
+        mask = np.asarray(mask[..., 0], dtype=np.float32)
+        mask[mask > 0] = 1
+        return torch.from_numpy(mask[np.newaxis, ...])
 
 
-def patchify_image(image, mask, shape):
-    images_shape = (*shape, 3)
-    masks_shape = (*shape, 1)
-    image_patches = patchify(image, images_shape, step=128)
-    mask_patches = patchify(mask, masks_shape, step=128)
-
-    num_patches = np.prod(np.array(image_patches.shape[:-3]))
-    image_patches = np.reshape(image_patches, (num_patches, *images_shape))
-    mask_patches = np.reshape(mask_patches, (num_patches, *masks_shape))
-    return image_patches, mask_patches
+def image_transform():
+    return transforms.Compose([
+        transforms.ToTensor()
+    ])
 
 
-def read_augment_dataset(data_folder: str, output_folder: str, number_of_augmentations: int):
-    df = pd.read_csv(os.path.join(data_folder, "grade.csv"))
-    metadata = []
-    reference_image = None
-
-    for index, row in df.iterrows():
-        print(f"Processing image {index} of {df.shape[0]}", end='\r')
-        img_file_name = f"{row['name']}.bmp"
-        mask_file_name = f"{row['name']}_anno.bmp"
-
-        # read image and apply soft blurring
-        image = cv2.imread(os.path.join(data_folder, img_file_name))
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = cv2.medianBlur(image, 3)
-
-        if index == 0:
-            reference_image = image
-        else:
-            image = normalize_color(image, reference_image)
-
-        # read mask
-        mask = cv2.imread(os.path.join(data_folder, mask_file_name))
-
-        # after this call, masks are reduced to (256, 256, 1)
-        images_patches, mask_patches = patchify_image(image, mask, (256, 256))
-
-        for i in range(images_patches.shape[0]):
-            augmented_images, augmented_masks = augment_image(images_patches[i], mask_patches[i],
-                                                              number_of_augmentations=number_of_augmentations)
-
-            for j in range(number_of_augmentations):
-                image_name = f"{row['name']}-p_{i}-a_{j}.bmp"
-                mask_name = f"{row['name']}-p_{i}-a_{j}_anno.bmp"
-                cv2.imwrite(os.path.join(output_folder, image_name), augmented_images[j])
-                cv2.imwrite(os.path.join(output_folder, mask_name), augmented_masks[j])
-
-                metadata.append({
-                    'name': row['name'],
-                    'image': image_name,
-                    'mask': mask_name,
-                    'patient': row['patient ID'],
-                    'grade1': row[' grade (GlaS)'],
-                    'grade2': row[' grade (Sirinukunwattana et al. 2015)']
-                })
-
-    df_processed = pd.DataFrame(metadata)
-    df_processed.to_csv(os.path.join(output_folder, 'grade.csv'))
+def mask_transform():
+    return transforms.Compose([
+        MaskSegmentationTransform()
+    ])
 
 
-if __name__ == "__main__":
-    folder = "dataset"
-    output = "augmented_dataset"
-    read_augment_dataset(data_folder=folder, output_folder=output, number_of_augmentations=3)
+class GlasDataset(Dataset):
+    def __init__(self, data_folder: str = 'augmented_dataset', train: bool = True):
+        self.data_folder = data_folder
+        self.image_transform = image_transform()
+        self.mask_transform = mask_transform()
+
+        df = pd.read_csv(os.path.join(data_folder, "grade.csv"))
+        df = df.query(f"name.str.startswith('{'train' if train else 'test'}')")
+        self.df = df
+
+        self.images = {}
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    def __getitem__(self, item_idx):
+        item = self.df.iloc[item_idx]
+        image_name = item['image']
+
+        if image_name not in self.images:
+            image = cv2.imread(os.path.join(self.data_folder, image_name))
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            self.images[image_name] = image
+
+        image = self.image_transform(self.images[image_name])
+
+        mask_name = item['mask']
+
+        if mask_name not in self.images:
+            mask = cv2.imread(os.path.join(self.data_folder, mask_name))
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+            self.images[mask_name] = mask
+
+        mask = self.mask_transform(self.images[mask_name])
+
+        return image, mask
+
+
+class GlassData(LightningDataModule):
+    def __init__(self, data_folder: str, batch_size: int = 64, validation_split: float = 0.1, num_workers: int = 0):
+        super(GlassData, self).__init__()
+        self.batch_size = batch_size
+        self.validation_split = validation_split
+        self.data_folder = data_folder
+        self.num_workers = num_workers
+
+        self.test_data = None
+        self.val_split = None
+        self.train_split = None
+        self.training_data = None
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        if stage in (None, 'fit'):
+            self.training_data = GlasDataset(self.data_folder, train=True)
+            dataset_length = len(self.training_data)
+            val_size = int(self.validation_split * dataset_length)
+            train_size = dataset_length - val_size
+            self.train_split, self.val_split = random_split(self.training_data, [train_size, val_size])
+
+        if stage in (None, 'test'):
+            self.test_data = GlasDataset(self.data_folder, train=False)
+
+    def train_dataloader(self) -> TRAIN_DATALOADERS:
+        return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+    def val_dataloader(self) -> EVAL_DATALOADERS:
+        return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+
+    def test_dataloader(self) -> EVAL_DATALOADERS:
+        return DataLoader(self.test_data, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)

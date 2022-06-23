@@ -241,3 +241,5 @@ materiales/
 
 augmented_dataset/
 dataset/
+lightning_logs/
+docker/
