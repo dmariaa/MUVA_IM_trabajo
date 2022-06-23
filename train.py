@@ -1,6 +1,6 @@
 import click
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from dataset import GlassData
 from lightning_model import LightningModel
@@ -18,12 +18,12 @@ def train(batch_size, epochs, learning_rate, num_workers, gpu):
     lm = LightningModel(model, learning_rate=learning_rate)
     datamodule = GlassData(data_folder='augmented_dataset', batch_size=batch_size, validation_split=0.1,
                            num_workers=num_workers)
-
+    lr_monitor = LearningRateMonitor(logging_interval='step')
     checkpoint_callback = ModelCheckpoint(save_top_k=5, monitor="val_loss")
     if gpu:
-        trainer = Trainer(max_epochs=epochs, accelerator="gpu", devices=1, callbacks=[checkpoint_callback])
+        trainer = Trainer(max_epochs=epochs, accelerator="gpu", devices=1, callbacks=[checkpoint_callback, lr_monitor])
     else:
-        trainer = Trainer(max_epochs=epochs, callbacks=[checkpoint_callback])
+        trainer = Trainer(max_epochs=epochs, callbacks=[checkpoint_callback, lr_monitor])
 
     trainer.fit(model=lm, datamodule=datamodule)
 

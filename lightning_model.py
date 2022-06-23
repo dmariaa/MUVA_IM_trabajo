@@ -29,7 +29,7 @@ class LightningModel(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                               factor=0.05, patience=5, threshold=0.0001,
+                                                               factor=0.2, patience=3, threshold=0.001,
                                                                threshold_mode='abs')
         return {
             'optimizer': optimizer,
@@ -73,6 +73,9 @@ class LightningModel(pl.LightningModule):
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         x, y = batch
         pred = self(x)
+        pred_data = (pred > 0.5).type(torch.uint8)
+        pred_data = pred_data.cpu().detach().numpy()
+
         return pred
 
     def _loss(self, y_pred, y_gt):
