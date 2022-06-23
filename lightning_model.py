@@ -5,7 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torchmetrics import Accuracy, Dice
+from torchmetrics import Accuracy, Dice, PrecisionRecallCurve
 
 
 class LightningModel(pl.LightningModule):
@@ -19,6 +19,7 @@ class LightningModel(pl.LightningModule):
 
         self.test_accuracy = Accuracy(mdmc_average='samplewise')
         self.test_dice = Dice()
+        self.test_precision_recall = PrecisionRecallCurve()
 
     def forward(self, x):
         return self.model(x)
@@ -64,11 +65,16 @@ class LightningModel(pl.LightningModule):
         x, y = batch
         y_hat = self(x)
         test_loss = self._loss(y_hat, y)
-        self.test_accuracy(torch.flatten((y_hat > 0.5).type(torch.uint8), start_dim=1),
-                           torch.flatten(y.type(torch.uint8), start_dim=1))
+
+        preds = torch.flatten((y_hat > 0.5).type(torch.uint8), start_dim=1)
+        gts = torch.flatten(y.type(torch.uint8), start_dim=1)
+        self.test_accuracy(preds, gts)
+        self.test_dice(preds, gts)
+        self.test_precision_recall.update(torch.flatten(y_hat, start_dim=1), gts)
 
         self.log("test_loss", test_loss, prog_bar=True)
         self.log("test_accuracy", self.test_accuracy, prog_bar=True)
+        self.log("test_dice", self.test_dice, prog_bar=True)
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         x, y = batch
@@ -77,6 +83,9 @@ class LightningModel(pl.LightningModule):
         pred_data = pred_data.cpu().detach().numpy()
 
         return pred
+
+    def on_test_end(self) -> None:
+        pass
 
     def _loss(self, y_pred, y_gt):
         return F.binary_cross_entropy(y_pred, y_gt)
